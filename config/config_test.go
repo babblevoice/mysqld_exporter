@@ -18,8 +18,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-kit/log"
-
+	"github.com/prometheus/common/promslog"
 	"github.com/smartystreets/goconvey/convey"
 )
 
@@ -28,7 +27,7 @@ func TestValidateConfig(t *testing.T) {
 		c := MySqlConfigHandler{
 			Config: &Config{},
 		}
-		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", true, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", true, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 
@@ -60,11 +59,11 @@ func TestValidateConfig(t *testing.T) {
 		c := MySqlConfigHandler{
 			Config: &Config{},
 		}
-		if err := c.ReloadConfig("testdata/child_client.cnf", "localhost:3306", "", true, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/child_client.cnf", "localhost:3306", "", true, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 		cfg := c.GetConfig()
-		section, _ := cfg.Sections["client.server1"]
+		section := cfg.Sections["client.server1"]
 		convey.So(section.Password, convey.ShouldEqual, "abc")
 	})
 
@@ -73,7 +72,7 @@ func TestValidateConfig(t *testing.T) {
 			Config: &Config{},
 		}
 		os.Setenv("MYSQLD_EXPORTER_PASSWORD", "supersecretpassword")
-		if err := c.ReloadConfig("", "testhost:5000", "testuser", true, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("", "testhost:5000", "testuser", true, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 
@@ -90,11 +89,27 @@ func TestValidateConfig(t *testing.T) {
 			Config: &Config{},
 		}
 		os.Setenv("MYSQLD_EXPORTER_PASSWORD", "supersecretpassword")
-		err := c.ReloadConfig("", "testhost", "testuser", true, log.NewNopLogger())
+		err := c.ReloadConfig("", "testhost", "testuser", true, promslog.NewNopLogger())
 		convey.So(
 			err,
 			convey.ShouldBeError,
 		)
+	})
+
+	convey.Convey("Unix socket address support", t, func() {
+		c := MySqlConfigHandler{
+			Config: &Config{},
+		}
+		os.Setenv("MYSQLD_EXPORTER_PASSWORD", "supersecretpassword")
+		if err := c.ReloadConfig("", "unix:///run/mysqld/mysqld.sock", "testuser", true, promslog.NewNopLogger()); err != nil {
+			t.Error(err)
+		}
+
+		cfg := c.GetConfig()
+		section := cfg.Sections["client"]
+		convey.So(section.Socket, convey.ShouldEqual, "/run/mysqld/mysqld.sock")
+		convey.So(section.User, convey.ShouldEqual, "testuser")
+		convey.So(section.Password, convey.ShouldEqual, "supersecretpassword")
 	})
 
 	convey.Convey("Config file precedence over environment variables", t, func() {
@@ -102,7 +117,7 @@ func TestValidateConfig(t *testing.T) {
 			Config: &Config{},
 		}
 		os.Setenv("MYSQLD_EXPORTER_PASSWORD", "supersecretpassword")
-		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "fakeuser", true, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "fakeuser", true, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 
@@ -117,7 +132,7 @@ func TestValidateConfig(t *testing.T) {
 			Config: &Config{},
 		}
 		os.Clearenv()
-		err := c.ReloadConfig("testdata/missing_user.cnf", "localhost:3306", "", true, log.NewNopLogger())
+		err := c.ReloadConfig("testdata/missing_user.cnf", "localhost:3306", "", true, promslog.NewNopLogger())
 		convey.So(
 			err,
 			convey.ShouldResemble,
@@ -130,12 +145,29 @@ func TestValidateConfig(t *testing.T) {
 			Config: &Config{},
 		}
 		os.Clearenv()
-		err := c.ReloadConfig("testdata/missing_password.cnf", "localhost:3306", "", true, log.NewNopLogger())
-		convey.So(
-			err,
-			convey.ShouldResemble,
-			fmt.Errorf("no configuration found"),
-		)
+		if err := c.ReloadConfig("testdata/missing_password.cnf", "localhost:3306", "", true, promslog.NewNopLogger()); err != nil {
+			t.Error(err)
+		}
+
+		cfg := c.GetConfig()
+		section := cfg.Sections["client"]
+		convey.So(section.User, convey.ShouldEqual, "abc")
+		convey.So(section.Password, convey.ShouldEqual, "")
+	})
+
+	convey.Convey("Client with cleartext password enabled", t, func() {
+		c := MySqlConfigHandler{
+			Config: &Config{},
+		}
+		os.Clearenv()
+		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", true, promslog.NewNopLogger()); err != nil {
+			t.Error(err)
+		}
+		cfg := c.GetConfig()
+		section := cfg.Sections["client.cleartextPlugin"]
+		convey.So(section.User, convey.ShouldEqual, "test")
+		convey.So(section.Password, convey.ShouldEqual, "foo")
+		convey.So(section.EnableCleartextPlugin, convey.ShouldBeTrue)
 	})
 }
 
@@ -149,7 +181,7 @@ func TestFormDSN(t *testing.T) {
 	)
 
 	convey.Convey("Host exporter dsn", t, func() {
-		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", false, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", false, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 		convey.Convey("Default Client", func() {
@@ -176,6 +208,14 @@ func TestFormDSN(t *testing.T) {
 			}
 			convey.So(dsn, convey.ShouldEqual, "test:foo@unix(/run/mysqld/mysqld.sock)/")
 		})
+		convey.Convey("With cleartext password enabled", func() {
+			cfg := c.GetConfig()
+			section := cfg.Sections["client.cleartextPlugin"]
+			if dsn, err = section.FormDSN(""); err != nil {
+				t.Error(err)
+			}
+			convey.So(dsn, convey.ShouldEqual, "test:foo@tcp(server2:3306)/?allowCleartextPasswords=true")
+		})
 	})
 }
 
@@ -189,7 +229,7 @@ func TestFormDSNWithSslSkipVerify(t *testing.T) {
 	)
 
 	convey.Convey("Host exporter dsn with tls skip verify", t, func() {
-		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", true, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/client.cnf", "localhost:3306", "", true, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 		convey.Convey("Default Client", func() {
@@ -221,7 +261,7 @@ func TestFormDSNWithCustomTls(t *testing.T) {
 	)
 
 	convey.Convey("Host exporter dsn with custom tls", t, func() {
-		if err := c.ReloadConfig("testdata/client_custom_tls.cnf", "localhost:3306", "", false, log.NewNopLogger()); err != nil {
+		if err := c.ReloadConfig("testdata/client_custom_tls.cnf", "localhost:3306", "", false, promslog.NewNopLogger()); err != nil {
 			t.Error(err)
 		}
 		convey.Convey("Target tls enabled", func() {
