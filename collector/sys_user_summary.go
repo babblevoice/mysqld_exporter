@@ -15,8 +15,8 @@ package collector
 
 import (
 	"context"
-	"database/sql"
-	"github.com/go-kit/log"
+	"log/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -98,7 +98,9 @@ func (ScrapeSysUserSummary) Version() float64 {
 }
 
 // Scrape the information from sys.user_summary, creating a metric for each value of each row, labeled with the user
-func (ScrapeSysUserSummary) Scrape(ctx context.Context, db *sql.DB, ch chan<- prometheus.Metric, logger log.Logger) error {
+func (ScrapeSysUserSummary) Scrape(ctx context.Context, instance *instance, ch chan<- prometheus.Metric, logger *slog.Logger) error {
+
+	db := instance.getDB()
 
 	userSummaryRows, err := db.QueryContext(ctx, sysUserSummaryQuery)
 	if err != nil {
@@ -109,14 +111,14 @@ func (ScrapeSysUserSummary) Scrape(ctx context.Context, db *sql.DB, ch chan<- pr
 	var (
 		user                   string
 		statements             uint64
-		statement_latency      uint64
+		statement_latency      float64
 		table_scans            uint64
 		file_ios               uint64
-		file_io_latency        uint64
+		file_io_latency        float64
 		current_connections    uint64
 		total_connections      uint64
 		unique_hosts           uint64
-		current_memory         uint64
+		current_memory         int64
 		total_memory_allocated uint64
 	)
 

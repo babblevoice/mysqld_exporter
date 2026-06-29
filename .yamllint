@@ -1,5 +1,8 @@
 ---
 extends: default
+ignore: |
+  **/node_modules
+  web/api/v1/testdata/openapi_*_golden.yaml
 
 rules:
   braces:
@@ -20,5 +23,4 @@ rules:
       config/testdata/section_key_dup.bad.yml
   line-length: disable
   truthy:
-    ignore: |
-      .github/workflows/*.yml
+    check-keys: false

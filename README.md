@@ -32,7 +32,7 @@ NOTE: It is recommended to set a max connection limit for the user to avoid over
 
 #####  Single exporter mode
 
-Running using ~/.my.cnf:
+Running using `.my.cnf` from the current directory:
 
     ./mysqld_exporter <flags>
 
@@ -56,6 +56,7 @@ Sample config file for multiple configurations
 On the prometheus side you can set a scrape config as follows
 
         - job_name: mysql # To get metrics about the mysql exporter’s targets
+          metrics_path: /probe
           params:
             # Not required. Will match value to child in config file. Default value is `client`.
             auth_module: [client.servers]
@@ -108,6 +109,7 @@ collect.info_schema.processlist                              | 5.1           | C
 collect.info_schema.processlist.min_time                     | 5.1           | Minimum time a thread must be in each state to be counted. (default: 0)
 collect.info_schema.query_response_time                      | 5.5           | Collect query response time distribution if query_response_time_stats is ON.
 collect.info_schema.replica_host                             | 5.6           | Collect metrics from information_schema.replica_host_status.
+collect.info_schema.rocksdb_perf_context                     | 5.6           | Collect RocksDB metrics from information_schema.ROCKSDB_PERF_CONTEXT.
 collect.info_schema.tables                                   | 5.1           | Collect metrics from information_schema.tables.
 collect.info_schema.tables.databases                         | 5.1           | The list of databases to collect table stats for, or '`*`' for all.
 collect.info_schema.tablestats                               | 5.1           | If running with userstat=1, set to true to collect table statistics.
@@ -139,11 +141,12 @@ collect.sys.user_summary                                     | 5.7           | C
 ### General Flags
 Name                                       | Description
 -------------------------------------------|--------------------------------------------------------------------------------------------------
-mysqld.address                             | Hostname and port used for connecting to MySQL server, format: `host:port`. (default: `locahost:3306`)
+mysqld.address                             | Hostname and port used for connecting to MySQL server, format: `host:port`. (default: `localhost:3306`)
 mysqld.username                            | Username to be used for connecting to MySQL Server
 config.my-cnf                              | Path to .my.cnf file to read MySQL credentials from. (default: `~/.my.cnf`)
 log.level                                  | Logging verbosity (default: info)
 exporter.lock_wait_timeout                 | Set a lock_wait_timeout (in seconds) on the connection to avoid long metadata locking. (default: 2)
+exporter.enable_lock_wait_timeout          | Enable the lock_wait_timeout connection parameter. Makes the exporter compatible with older versions of MySQL. (default: true)
 exporter.log_slow_filter                   | Add a log_slow_filter to avoid slow query logging of scrapes.  NOTE: Not supported by Oracle MySQL.
 tls.insecure-skip-verify                   | Ignore tls verification errors.
 web.config.file                            | Path to a [web configuration file](#tls-and-basic-authentication)
@@ -186,7 +189,7 @@ ssl-cert=/path/to/ssl/client/cert
 
 ## Using Docker
 
-You can deploy this exporter using the [prom/mysqld-exporter](https://registry.hub.docker.com/r/prom/mysqld-exporter/) Docker image.
+You can deploy this exporter using the [prom/mysqld-exporter](https://hub.docker.com/r/prom/mysqld-exporter/) Docker image.
 
 For example:
 
@@ -196,9 +199,9 @@ docker pull prom/mysqld-exporter
 
 docker run -d \
   -p 9104:9104 \
+  -v /home/user/user_my.cnf:/.my.cnf \
   --network my-mysql-network  \
   prom/mysqld-exporter
-  --config.my-cnf=<path_to_cnf>
 ```
 
 ## heartbeat
